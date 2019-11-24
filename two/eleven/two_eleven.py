@@ -6,6 +6,7 @@ import numpy as np
 import random
 import time
 import signal
+import sys
 
 def simple_relfex(dirty, up, down, right, left):
     """
@@ -53,6 +54,160 @@ def randomized_reflex(dirty, up, down, right, left):
         choice = random.choice(actions.keys())
         if actions[choice]:
             return choice
+
+class SensorMeas:
+    def __init__(self, dirty, up, down, right, left):
+        self.dirty = dirty
+        self.up = up
+        self.down = down
+        self.right = right
+        self.left = left
+
+# defines
+WALL      = 3
+DIRTY     = 2
+CLEAN     = 1
+UNKNOWN   = 0
+
+class RationAgent:
+    def __init__(self):
+        self.responce_number = 0
+        self.seq = 0
+        self.state = 0
+        self.map = np.zeros((3,3))
+        self.current_pos = [1,1]
+
+    def determine_response_number(self, meas):
+        total = int(meas.up) + int(meas.down) + int(meas.right) + int(meas.left)
+        if total > 1:
+            self.responce_number = 1
+        elif total:
+            self.responce_number = 2
+        else:
+            self.responce_number = 3
+
+    def update_map(self, meas):
+        """ Marks Walls and clean/dirty on the map """
+        print("Current meas:")
+        print("d: " + str(meas.dirty))
+        print("up: " + str(meas.up))
+        print("down: " + str(meas.down))
+        print("right: " + str(meas.right))
+        print("left: " + str(meas.left))
+
+        x = self.current_pos[0]
+        y = self.current_pos[1]
+        if meas.dirty:
+            self.map[x,y] = DIRTY
+        else:
+            self.map[x,y] = CLEAN
+        
+        if not meas.up:
+            self.map[x-1,y] = WALL
+        elif not meas.down:
+            self.map[x+1,y] = WALL
+        if not meas.right:
+            self.map[x,y+1] = WALL
+        elif not meas.left:
+            self.map[x,y-1] = WALL
+    
+    def test_map_building(self):
+        """ Gets the action via key motion from the user """
+        while True:
+            key = raw_input("Next motion: (w,a,s,d, q for quit)\n")
+            if key == "w":
+                print("up")
+                return "up"
+            elif key == "a":
+                print("left")
+                return "left"
+            elif key == "d":
+                print("right")
+                return "right"
+            elif key == "s":
+                print("down")
+                return "down"
+            elif key == "q":
+                sys.exit(1)
+            else:
+                print("Unrecognized input key: " + key)
+
+    def print_map(self):
+        map_str = np.empty(self.map.shape, dtype="|S1")
+        [x,y] = self.map.shape
+        for i in range(self.map.size):
+            if self.map.flatten()[i] == WALL:
+                map_str[i//y, i % y] = "X"
+            elif self.map.flatten()[i] == UNKNOWN:
+                map_str[i//y, i % y] = " "
+            elif self.map.flatten()[i] == DIRTY:
+                map_str[i//y, i % y] = "*"
+            elif self.map.flatten()[i] == CLEAN:
+                map_str[i//y, i % y] = "_"
+        print(map_str)
+
+    def handle_motion(self, motion):
+        # update self.current_pos & grow the map
+        if motion == "clean":
+            pass
+        elif motion == "up":
+            if self.current_pos[0] - 1 < 0: # grow map upwards
+                self.map = np.append(np.zeros( (1,self.map.shape[1]) ), self.map, axis=0)
+                # NOTE, adjusting the map here also moves the position
+            else:
+                self.current_pos[0] -= 1
+                
+        elif motion == "down":
+            self.current_pos[0] += 1
+            if self.current_pos[0] + 1 > self.map.shape[0]: # grow map downwards
+                self.map = np.append(self.map, np.zeros((1, self.map.shape[1])), axis=0)
+
+        elif motion == "left":
+            if self.current_pos[1] - 1 < 0: # grow map leftwards
+                self.map = np.append(np.zeros( (self.map.shape[0]),1 ), self.map, axis=1)
+                # NOTE, adjusting the map here also moves the position
+            else:
+                self.current_pos[1] -= 1
+
+        elif motion == "right":
+            self.current_pos[1] += 1
+            if self.current_pos[1] + 1 > self.map.shape[1]: # grow map rightwards
+                self.map = np.append(self.map, np.zeros((self.map.shape[0],1)), axis=1)
+
+    def reflex_type1(self, meas): # start in corner
+        if meas.dirty:
+            return "clean"
+        
+    def reflex_type2(self, meas): # start on edge
+        pass
+
+    def reflex_type3(self, meas): # start in darkness
+        pass
+ 
+    def rational_reflex(self, meas):
+        """ meas : SensorMeas Type """
+        if self.responce_number == 0:
+            self.determine_response_number(meas)
+            print("response #: " + str(self.responce_number))
+
+        self.seq += 1
+
+        # Respond
+        self.update_map(meas)
+        self.print_map()
+        motion = self.test_map_building()
+        self.handle_motion(motion)
+        
+        return motion
+
+        # if self.responce_number == 1:
+        #     self.reflex_type1(meas)
+        # elif self.responce_number == 2:
+        #     self.reflex_type2(meas)
+        # elif self.responce_number == 3:
+        #     self.reflex_type3(meas)
+        # else:
+        #     raise(Exception("Unrecognized response number"))
 
 def build_map(dirty_prob, map_type="rect", dims=(10,10)):
     """
@@ -121,7 +276,7 @@ def simulate(test_map, start_loc, action_func):
             dirty = False
         # check bounds of map, check that wall (|) does not exist...
         up, down, right, left = check_available_moves(agent_loc, test_map.shape)
-        action = action_func(dirty, up, down, right, left)
+        action = action_func( SensorMeas(dirty, up, down, right, left) )
         test_map, agent_loc = execute_action(test_map, agent_loc, action)
         print_map = test_map.copy()
         print_map[agent_loc[0], agent_loc[1]] = "A"
@@ -152,7 +307,9 @@ def part_b():
     row = random_loc // map_n
     col = random_loc % map_n
     # simulate(test_map, (row, col), simple_relfex)
-    simulate(test_map, (row, col), randomized_reflex)
+    # simulate(test_map, (row, col), randomized_reflex)
+    r = RationAgent()
+    simulate(test_map, (row, col), r.rational_reflex)
 
 # @credits: Mayank Jaiswal 2015 Stack Overflow
 class GracefulKiller:
