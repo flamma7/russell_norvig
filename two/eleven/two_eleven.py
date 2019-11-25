@@ -8,6 +8,13 @@ import time
 import signal
 import sys
 
+"""
+TODO
+- map printing is functional, add current position printing
+- map extending appears to be disfunctional atm as well
+- once I can map out the entire map via moving around --> add decision logic
+"""
+
 def simple_relfex(dirty, up, down, right, left):
     """
     Memoryless, condition-action rule pairs
@@ -88,12 +95,12 @@ class RationAgent:
 
     def update_map(self, meas):
         """ Marks Walls and clean/dirty on the map """
-        print("Current meas:")
-        print("d: " + str(meas.dirty))
-        print("up: " + str(meas.up))
-        print("down: " + str(meas.down))
-        print("right: " + str(meas.right))
-        print("left: " + str(meas.left))
+        # print("Current meas:")
+        # print("d: " + str(meas.dirty))
+        # print("up: " + str(meas.up))
+        # print("down: " + str(meas.down))
+        # print("right: " + str(meas.right))
+        # print("left: " + str(meas.left))
 
         x = self.current_pos[0]
         y = self.current_pos[1]
@@ -111,26 +118,33 @@ class RationAgent:
         elif not meas.left:
             self.map[x,y-1] = WALL
     
-    def test_map_building(self):
+    def test_map_building(self, dirty):
         """ Gets the action via key motion from the user """
         while True:
-            key = raw_input("Next motion: (w,a,s,d, q for quit)\n")
+            print("-------------------------")
+            if dirty:
+                print("Square is dirty")
+            key = raw_input("Next motion: (w,a,s,d, c for clean, q for quit)\n")
             if key == "w":
-                print("up")
-                return "up"
+                motion = "up"
             elif key == "a":
-                print("left")
-                return "left"
+                motion = "left"
             elif key == "d":
-                print("right")
-                return "right"
+                motion = "right"
             elif key == "s":
-                print("down")
-                return "down"
+                motion = "down"
+            elif key == "c":
+                return "clean"
             elif key == "q":
                 sys.exit(1)
             else:
                 print("Unrecognized input key: " + key)
+                continue
+
+            if self.determine_valid_motion(motion):
+                return motion
+            else:
+                print("You ran into a wall!")
 
     def print_map(self):
         map_str = np.empty(self.map.shape, dtype="|S1")
@@ -144,14 +158,30 @@ class RationAgent:
                 map_str[i//y, i % y] = "*"
             elif self.map.flatten()[i] == CLEAN:
                 map_str[i//y, i % y] = "_"
+        print("DIRTY: *\tCLEAN: _\tWALL: X")
+        map_str[self.current_pos[0], self.current_pos[1]] = "A"
         print(map_str)
 
+    def determine_valid_motion(self, motion):
+        [x,y] = self.current_pos
+        if motion == "up" and self.map[x-1,y] == WALL:
+            return False
+        elif motion == "down" and self.map[x+1,y] == WALL:
+            return False
+        elif motion == "left" and self.map[x,y-1] == WALL:
+            return False
+        elif motion == "right" and self.map[x,y+1] == WALL:
+            return False
+        else:
+            return True
+
     def handle_motion(self, motion):
-        # update self.current_pos & grow the map
+        """ Updates the current position and grows the map """
+
         if motion == "clean":
             pass
         elif motion == "up":
-            if self.current_pos[0] - 1 < 0: # grow map upwards
+            if self.current_pos[0] - 2 < 0: # grow map upwards
                 self.map = np.append(np.zeros( (1,self.map.shape[1]) ), self.map, axis=0)
                 # NOTE, adjusting the map here also moves the position
             else:
@@ -159,19 +189,19 @@ class RationAgent:
                 
         elif motion == "down":
             self.current_pos[0] += 1
-            if self.current_pos[0] + 1 > self.map.shape[0]: # grow map downwards
+            if self.current_pos[0] + 2 > self.map.shape[0]: # grow map downwards
                 self.map = np.append(self.map, np.zeros((1, self.map.shape[1])), axis=0)
 
         elif motion == "left":
-            if self.current_pos[1] - 1 < 0: # grow map leftwards
-                self.map = np.append(np.zeros( (self.map.shape[0]),1 ), self.map, axis=1)
+            if self.current_pos[1] - 2 < 0: # grow map leftwards
+                self.map = np.append(np.zeros( (self.map.shape[0],1)), self.map, axis=1)
                 # NOTE, adjusting the map here also moves the position
             else:
                 self.current_pos[1] -= 1
 
         elif motion == "right":
             self.current_pos[1] += 1
-            if self.current_pos[1] + 1 > self.map.shape[1]: # grow map rightwards
+            if self.current_pos[1] + 2 > self.map.shape[1]: # grow map rightwards
                 self.map = np.append(self.map, np.zeros((self.map.shape[0],1)), axis=1)
 
     def reflex_type1(self, meas): # start in corner
@@ -195,7 +225,7 @@ class RationAgent:
         # Respond
         self.update_map(meas)
         self.print_map()
-        motion = self.test_map_building()
+        motion = self.test_map_building(meas.dirty)
         self.handle_motion(motion)
         
         return motion
@@ -278,12 +308,12 @@ def simulate(test_map, start_loc, action_func):
         up, down, right, left = check_available_moves(agent_loc, test_map.shape)
         action = action_func( SensorMeas(dirty, up, down, right, left) )
         test_map, agent_loc = execute_action(test_map, agent_loc, action)
-        print_map = test_map.copy()
-        print_map[agent_loc[0], agent_loc[1]] = "A"
+        # print_map = test_map.copy()
+        # print_map[agent_loc[0], agent_loc[1]] = "A"
         # print(print_map)
         # print("------------------------------------")
         # time.sleep(2)
-    print(num_loops)
+    print(str(num_loops) + " moves taken")
 
 
 def part_b():
@@ -300,7 +330,7 @@ def part_b():
         Can I design a framework that maps & predicts spots
     
     """
-    map_n = 5
+    map_n = 3
     test_map = build_map(0.5, dims=(map_n,map_n))
     # choose random location for agent
     random_loc = np.random.randint(0, map_n**2)
